@@ -1,86 +1,36 @@
 import streamlit as st
-import xarray as xr
-import pandas as pd
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import numpy as np
-plt.rc('font', family='Malgun Gothic')   # 윈도우
-# plt.rc('font', family='AppleGothic')   # 맥
-plt.rcParams['axes.unicode_minus'] = False
-st.set_page_config(page_title="해수온 상승 대시보드", layout="wide")
+import streamlit.components.v1 as components
+import os
 
-st.title("🌊 해수온 상승과 바다의 미래: 변화와 대응 전략")
-st.markdown("NOAA OISST (Optimum Interpolation Sea Surface Temperature) 데이터를 활용한 시각화")
+# --- 페이지 설정 ---
+st.set_page_config(
+    page_title="게임: 사라지는 얼음",
+    page_icon="🧊",
+    layout="wide",
+)
 
-# ---------------------------
-# 데이터 불러오기
-# ---------------------------
-@st.cache_data
-def load_data():
-    url = "https://psl.noaa.gov/thredds/dodsC/Datasets/noaa.oisst.v2/sst.mnmean.nc"
-    ds = xr.open_dataset(url)
-    return ds
+# --- 폰트 적용 ---
+# (이전과 동일하게 Pretendard-Bold.ttf 폰트를 적용하는 함수, 필요시 추가)
+def apply_custom_font():
+    FONT_PATH = "/fonts/Pretendard-Bold.ttf"
+    if os.path.exists(FONT_PATH):
+        # 폰트 적용 CSS 코드 (이전 답변 내용과 동일)
+        pass # 여기에 이전 폰트 적용 코드를 붙여넣으세요.
+apply_custom_font()
 
-ds = load_data()
-sst = ds['sst']
 
-# ---------------------------
-# 전 세계 평균 해수온 시계열
-# ---------------------------
-st.subheader("📈 전 세계 평균 해수온 추이")
+# --- 메인 앱 ---
+st.title("🧊 GUI 게임: 사라지는 얼음")
+st.markdown("""
+**조작법:** 스페이스 바 또는 마우스 클릭으로 점프하세요!
 
-global_mean = sst.mean(dim=["lat","lon"])
-global_df = global_mean.to_dataframe().reset_index()
+점점 빠르게 사라지는 얼음들을 피해 북극곰이 최대한 멀리 갈 수 있도록 도와주세요. 얼음이 사라지는 속도가 빨라지는 것은 **지구 온난화가 가속화되는 현실**을 의미합니다.
+""")
 
-fig, ax = plt.subplots(figsize=(8,4))
-ax.plot(global_df['time'], global_df['sst'], color="red")
-ax.set_title("전 세계 평균 해수온 (°C)")
-ax.set_ylabel("온도 (°C)")
-ax.set_xlabel("연도")
-st.pyplot(fig)
-
-# ---------------------------
-# 한반도 주변 해수온 시계열
-# ---------------------------
-st.subheader("📊 한반도 주변 해수온 추이")
-
-lat_range = st.slider("위도 범위 선택", 30, 50, (33, 40))
-lon_range = st.slider("경도 범위 선택", 120, 145, (125, 135))
-
-region = sst.sel(lat=slice(lat_range[0], lat_range[1]),
-                 lon=slice(lon_range[0], lon_range[1]))
-region_mean = region.mean(dim=["lat","lon"])
-region_df = region_mean.to_dataframe().reset_index()
-
-fig, ax = plt.subplots(figsize=(8,4))
-ax.plot(region_df['time'], region_df['sst'], color="blue")
-ax.set_title("한반도 주변 평균 해수온 (°C)")
-ax.set_ylabel("온도 (°C)")
-ax.set_xlabel("연도")
-st.pyplot(fig)
-
-# ---------------------------
-# 지도 시각화 (산호 백화/이상)
-# ---------------------------
-st.subheader("🗺️ 해수온 지도 시각화")
-
-year = st.slider("연도 선택", 1982, 2023, 2020)
-month = st.slider("월 선택", 1, 12, 8)
-
-# 시간 차원 제거
-selected = sst.sel(time=f"{year}-{month:02d}").squeeze()
-
-fig = plt.figure(figsize=(10,5))
-ax = plt.axes(projection=ccrs.PlateCarree())
-ax.set_global()
-
-pcm = ax.pcolormesh(selected['lon'], selected['lat'], selected,
-                    cmap="coolwarm", transform=ccrs.PlateCarree(), shading="auto")
-
-ax.add_feature(cfeature.COASTLINE)
-ax.set_title(f"{year}-{month:02d} 해수온 (°C)")
-plt.colorbar(pcm, ax=ax, orientation="horizontal", pad=0.05, label="°C")
-
-st.pyplot(fig)
-
+# game.html 파일을 읽어와서 삽입
+try:
+    with open('game.html', 'r', encoding='utf-8') as f:
+        html_code = f.read()
+    components.html(html_code, height=610)
+except FileNotFoundError:
+    st.error("게임 파일을 찾을 수 없습니다. 'game.html' 파일이 streamlit_app.py와 같은 폴더에 있는지 확인해주세요.")

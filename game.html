@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    /* CSS 스타일은 이전과 동일합니다 */
+    body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #f0f8ff; }
+    #game-container { width: 100%; height: 100vh; background-color: #87ceeb; position: relative; overflow: hidden; border-radius: 10px; transition: background-color 0.5s; }
+    #player { width: 50px; height: 50px; font-size: 40px; text-align: center; position: absolute; }
+    .platform { width: 100px; height: 20px; background-color: #ffffff; border: 2px solid #a2d2ff; border-radius: 10px; position: absolute; transition: opacity 0.5s, transform 0.2s; }
+    .item { position: absolute; font-size: 25px; left: 50%; transform: translateX(-50%); bottom: 22px; }
+    #ui-container { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 24px; color: #002b4d; font-weight: bold; }
+    #message-board { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -150%); font-size: 28px; color: #ffc300; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; z-index: 10;}
+    #start-screen, #end-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #002b4d; background-color: rgba(255, 255, 255, 0.8); padding: 20px; border-radius: 15px; z-index: 10;}
+    #start-reset-button { font-size: 20px; padding: 10px 20px; margin-top: 20px; border: 2px solid #002b4d; background-color: #ffffff; color: #002b4d; border-radius: 10px; cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="player" style="display: none;">🐻</div>
+    <div id="ui-container">
+        <div id="timer">시간: 0.0초</div>
+        <div id="score">점수: 0</div>
+    </div>
+    <div id="message-board"></div>
+    <div id="start-screen">
+        <h1 style="font-size: 36px;">사라지는 얼음</h1>
+        <p>60초 동안 생존하고 최고 점수를 기록하세요!</p>
+        <button id="start-reset-button">게임 시작</button>
+    </div>
+    <div id="end-screen" style="display: none;">
+        <h1 id="end-title">GAME OVER</h1>
+        <p id="end-text"></p>
+    </div>
+</div>
+
+<script>
+    const game = { container: document.getElementById('game-container'), player: document.getElementById('player'), timerUI: document.getElementById('timer'), scoreUI: document.getElementById('score'), messageUI: document.getElementById('message-board'), startScreen: document.getElementById('start-screen'), endScreen: document.getElementById('end-screen'), endTitle: document.getElementById('end-title'), endText: document.getElementById('end-text'), startButton: document.getElementById('start-reset-button'), width: 0, height: 0 };
+    
+    const config = {
+        gravity: 0.35,
+        jumpPower: -10.5,
+        platformCount: 7,
+        baseScrollSpeed: 1.2,
+        // ===============================================
+        // === <<< 수정: 이동 속도 및 마찰력 값 조정 ===
+        // ===============================================
+        moveSpeed: 3,     // 기존 5에서 3으로 변경 (더 느리게)
+        friction: 0.75   // 기존 0.8에서 0.75로 변경 (더 빨리 멈춤)
+    };
+
+    let state = {};
+
+    function initializeState() { /* 이전 코드와 동일 */
+        state = {
+            playerX: 0, playerY: 0, velocityY: 0, velocityX: 0,
+            isMovingLeft: false, isMovingRight: false,
+            platforms: [], score: 0, startTime: 0, elapsedTime: 0,
+            gameStarted: false, isGameOver: false, gameCleared: false,
+            stormActive: false, stormTimer: 0, trashPenaltyTimer: 0,
+        };
+        game.width = game.container.clientWidth; game.height = game.container.clientHeight;
+        state.playerX = game.width / 2 - 25; state.playerY = game.height - 100;
+        game.player.style.left = state.playerX + 'px';
+    }
+
+    function createPlatforms() { /* 이전 코드와 동일 */
+        document.querySelectorAll('.platform').forEach(p => p.remove());
+        state.platforms = [];
+        const startY = state.playerY + 40;
+        for (let i = 0; i < config.platformCount; i++) {
+            const plat = { y: 0, x: 0, element: document.createElement('div'), hasFish: false, hasTrash: false, isDisappearing: false };
+            plat.element.className = 'platform';
+            if (i === 0) { plat.x = state.playerX - 25; plat.y = startY; } 
+            else { plat.x = Math.random() * (game.width - 100); plat.y = startY - (i * 95); }
+            plat.element.style.left = plat.x + 'px'; plat.element.style.top = plat.y + 'px';
+            game.container.appendChild(plat.element); state.platforms.push(plat);
+        }
+    }
+    
+    function resetPlatform(plat) { /* 이전 코드와 동일 */
+        plat.isDisappearing = false; plat.element.style.opacity = 1; plat.element.innerHTML = ''; plat.hasFish = false; plat.hasTrash = false;
+        plat.y = game.height; plat.x = Math.random() * (game.width - 100);
+        if (state.elapsedTime > 10 && Math.random() < 0.25) { plat.hasFish = true; plat.element.innerHTML = '<div class="item">🐟</div>'; } 
+        else if (state.elapsedTime > 40 && Math.random() < 0.2) { plat.hasTrash = true; plat.element.innerHTML = '<div class="item">🛍️</div>';}
+    }
+
+    function startGame() { /* 이전 코드와 동일 */
+        initializeState(); state.gameStarted = true; state.startTime = Date.now();
+        game.startScreen.style.display = 'none'; game.endScreen.style.display = 'none'; game.player.style.display = 'block';
+        createPlatforms();
+        updateGame();
+    }
+    
+    function updateGame() {
+        if (!state.gameStarted || state.isGameOver) return;
+        state.elapsedTime = (Date.now() - state.startTime) / 1000;
+
+        let currentScrollSpeed = config.baseScrollSpeed;
+        if (state.elapsedTime > 60) { currentScrollSpeed = config.baseScrollSpeed * 2.5; } 
+        else if (state.elapsedTime > 40) { currentScrollSpeed = config.baseScrollSpeed * 1.8; }
+        else if (state.elapsedTime > 20) { currentScrollSpeed = config.baseScrollSpeed * 1.4; }
+        if(state.trashPenaltyTimer > 0) currentScrollSpeed *= 1.5;
+        if(state.stormActive) currentScrollSpeed *= 1.8;
+        
+        if (state.isMovingLeft) state.velocityX = -config.moveSpeed;
+        if (state.isMovingRight) state.velocityX = config.moveSpeed;
+        state.playerX += state.velocityX;
+        state.velocityX *= config.friction;
+        if (state.playerX < 0) state.playerX = 0;
+        if (state.playerX > game.width - 50) state.playerX = game.width - 50;
+        
+        state.velocityY += config.gravity;
+        state.playerY += state.velocityY;
+
+        state.platforms.forEach(plat => {
+            const playerBottom = state.playerY + 50; const playerRight = state.playerX + 50; const platformTop = plat.y; const platformBottom = plat.y + 20; const platformLeft = plat.x; const platformRight = plat.x + 100;
+            if (playerRight > platformLeft && state.playerX < platformRight && playerBottom >= platformTop && playerBottom <= platformBottom && state.velocityY >= 0) {
+                state.velocityY = 0; state.playerY = platformTop - 50;
+                if (plat.hasFish) { state.score += 50; plat.hasFish = false; plat.element.innerHTML = ''; }
+                if (plat.hasTrash) { state.trashPenaltyTimer = 3; plat.hasTrash = false; plat.element.innerHTML = ''; showMessage("속도 페널티!");}
+            }
+            plat.y -= currentScrollSpeed;
+            if(state.elapsedTime > 20 && !plat.isDisappearing && Math.random() < 0.0008) { plat.isDisappearing = true; plat.element.style.opacity = 0; }
+            if (plat.y < -20) { resetPlatform(plat); }
+            plat.element.style.top = plat.y + 'px'; plat.element.style.left = plat.x + 'px';
+        });
+
+        if (state.elapsedTime > 40 && !state.stormActive && Math.random() < 0.0015) { state.stormActive = true; state.stormTimer = 5; game.container.style.backgroundColor = '#4682B4'; showMessage("폭풍 발생!"); }
+        if(state.stormTimer > 0) { state.stormTimer -= 1/60; if(state.stormTimer <= 0) { state.stormActive = false; game.container.style.backgroundColor = '#87ceeb'; } }
+        if(state.trashPenaltyTimer > 0) state.trashPenaltyTimer -= 1/60;
+
+        game.player.style.top = state.playerY + 'px'; game.player.style.left = state.playerX + 'px';
+        game.timerUI.textContent = `시간: ${state.elapsedTime.toFixed(1)}초`; game.scoreUI.textContent = `점수: ${state.score}`;
+        if (state.elapsedTime >= 60 && !state.gameCleared) { state.gameCleared = true; showMessage("60초 생존! 보너스 모드!"); }
+        if (state.playerY > game.height) endGame();
+        requestAnimationFrame(updateGame);
+    }
+    
+    function endGame() { /* 이전 코드와 동일 */
+        state.isGameOver = true; game.player.style.display = 'none';
+        game.endTitle.textContent = state.gameCleared ? "SUCCESS!" : "GAME OVER";
+        game.endText.textContent = `최종 점수: ${state.score}, 생존 시간: ${state.elapsedTime.toFixed(1)}초`;
+        game.endScreen.style.display = 'block'; game.startButton.textContent = "다시 시작";
+        game.endScreen.appendChild(game.startButton);
+    }
+
+    function jump() { /* 이전 코드와 동일 */
+        if (!state.gameStarted || state.isGameOver) return;
+        if (state.velocityY === 0) { state.velocityY = config.jumpPower; }
+    }
+    
+    function showMessage(msg) { /* 이전 코드와 동일 */
+        game.messageUI.textContent = msg; game.messageUI.style.display = 'block';
+        setTimeout(() => { game.messageUI.style.display = 'none'; }, 2000);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') jump();
+        if (e.code === 'ArrowLeft') state.isMovingLeft = true;
+        if (e.code === 'ArrowRight') state.isMovingRight = true;
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft') state.isMovingLeft = false;
+        if (e.code === 'ArrowRight') state.isMovingRight = false;
+    });
+    game.startButton.addEventListener('click', (e) => { e.stopPropagation(); startGame(); });
+    game.container.addEventListener('mousedown', jump);
+    
+    initializeState();
+</script>
+</body>
+</html>
